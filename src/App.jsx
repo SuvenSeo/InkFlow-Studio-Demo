@@ -33,6 +33,7 @@ import {
   KeyRound,
   Layers3,
   Library,
+  LineChart,
   Lock,
   LogOut,
   LogIn,
@@ -66,6 +67,7 @@ import {
   Trash2,
   Unlock,
   Upload,
+  WandSparkles,
   UserCheck,
   UserPlus,
   Users,
@@ -89,6 +91,13 @@ const navItems = [
 const genres = ["All", "Fantasy", "Romance", "Sci-Fi", "Mystery"];
 const sortOptions = ["Trending", "For You", "Top Rated", "New Updates"];
 const EMPTY_AD_PLACEMENTS = {};
+const demoPersonas = [
+  { id: "visitor", label: "Visitor", name: "", role: "Guest", plan: "free", email: "" },
+  { id: "reader", label: "Reader", name: "Ishara Perera", role: "Reader", plan: "free", email: "reader@inkflow.demo" },
+  { id: "premium", label: "Premium user", name: "Nethmi Silva", role: "Reader", plan: "premium", email: "premium@inkflow.demo" },
+  { id: "author", label: "Verified author", name: "Mira Vale", role: "Verified Author", plan: "premium", email: "author@inkflow.demo" },
+  { id: "admin", label: "Admin", name: "Arden Admin", role: "Admin", plan: "premium", email: "admin@inkflow.demo" },
+];
 const demoSteps = [
   { view: "auth", label: "Secure onboarding", note: "OAuth, email, reader/writer roles" },
   { view: "discover", label: "Personalized discovery", note: "Search, genre, tags, Redis ranking" },
@@ -118,9 +127,35 @@ const initialReviews = [
   { id: 2, name: "Rowan", rating: 4, text: "The premium preview is clear without feeling disruptive." },
 ];
 
+function routeForView(view, storyId = stories[0].id) {
+  if (view === "reader") return `#/reader/${storyId}`;
+  if (view === "story") return `#/story/${storyId}`;
+  if (view === "writer") return "#/writer/dashboard";
+  if (view === "admin") return "#/admin/operations";
+  if (view === "premium") return "#/premium";
+  if (view === "auth") return "#/login";
+  if (view === "discover") return "#/discover";
+  return "#/";
+}
+
+function parseRoute() {
+  const hash = window.location.hash.replace(/^#\/?/, "");
+  const [section, id] = hash.split("/");
+  if (section === "reader" && id) return { view: "reader", storyId: id };
+  if (section === "story" && id) return { view: "story", storyId: id };
+  if (section === "writer") return { view: "writer" };
+  if (section === "admin") return { view: "admin" };
+  if (section === "premium") return { view: "premium" };
+  if (section === "login") return { view: "auth" };
+  if (section === "discover") return { view: "discover" };
+  return { view: "showcase" };
+}
+
 function App() {
-  const [activeView, setActiveView] = useState("showcase");
-  const [selectedStoryId, setSelectedStoryId] = useState(stories[0].id);
+  const initialRoute = useMemo(() => parseRoute(), []);
+  const initialStoryId = initialRoute.storyId && stories.some((story) => story.id === initialRoute.storyId) ? initialRoute.storyId : stories[0].id;
+  const [activeView, setActiveView] = useState(initialRoute.view);
+  const [selectedStoryId, setSelectedStoryId] = useState(initialStoryId);
   const [genre, setGenre] = useState("All");
   const [sortBy, setSortBy] = useState("Trending");
   const [query, setQuery] = useState("");
@@ -135,6 +170,10 @@ function App() {
   const [toast, setToast] = useState("");
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [guidedStep, setGuidedStep] = useState(0);
+  const [persona, setPersona] = useState("visitor");
+  const [presentationOpen, setPresentationOpen] = useState(false);
+  const [presentationStep, setPresentationStep] = useState(0);
+  const [checkout, setCheckout] = useState(null);
   const [commentsState, setCommentsState] = useState(comments);
   const [reviews, setReviews] = useState(initialReviews);
   const [unlockedChapters, setUnlockedChapters] = useState(new Set());
@@ -159,6 +198,26 @@ function App() {
   const [onlineReaders, setOnlineReaders] = useState(41000);
 
   const selectedStory = stories.find((story) => story.id === selectedStoryId) ?? stories[0];
+
+  useEffect(() => {
+    const applyRoute = () => {
+      const route = parseRoute();
+      if (route.storyId && stories.some((story) => story.id === route.storyId)) {
+        setSelectedStoryId(route.storyId);
+      }
+      setActiveView(route.view);
+    };
+    applyRoute();
+    window.addEventListener("hashchange", applyRoute);
+    return () => window.removeEventListener("hashchange", applyRoute);
+  }, []);
+
+  useEffect(() => {
+    const nextHash = routeForView(activeView, selectedStoryId);
+    if (window.location.hash !== nextHash) {
+      window.history.replaceState(null, "", nextHash);
+    }
+  }, [activeView, selectedStoryId]);
 
   const filteredStories = useMemo(() => {
     const normalizedQuery = query.toLowerCase();
@@ -201,6 +260,11 @@ function App() {
     setActiveView("auth");
   }
 
+  function navigate(view, storyId = selectedStoryId) {
+    if (storyId) setSelectedStoryId(storyId);
+    setActiveView(view);
+  }
+
   function showToast(message) {
     setToast(message);
   }
@@ -215,6 +279,33 @@ function App() {
 
   function startGuidedDemo() {
     jumpToStep(0);
+  }
+
+  function applyPersona(personaId) {
+    const nextPersona = demoPersonas.find((item) => item.id === personaId) ?? demoPersonas[0];
+    setPersona(personaId);
+    if (nextPersona.id === "visitor") {
+      setUser(null);
+      setMembership("free");
+      showToast("Visitor persona active.");
+      return;
+    }
+    setUser({
+      name: nextPersona.name,
+      email: nextPersona.email,
+      provider: "Demo persona",
+      role: nextPersona.role,
+      country: "Sri Lanka",
+    });
+    setMembership(nextPersona.plan);
+    showToast(`${nextPersona.label} persona active.`);
+  }
+
+  function openCheckout(storyId = selectedStory.id, chapter = 1) {
+    requireAuth(() => {
+      const story = stories.find((item) => item.id === storyId) ?? selectedStory;
+      setCheckout({ story, chapter, method: "Card" });
+    });
   }
 
   function requireAuth(action, mode = "login") {
@@ -329,7 +420,7 @@ function App() {
   return (
     <div className="app" style={{ "--brand-accent": brandAccent }}>
       <aside className="rail" aria-label="Primary">
-        <button className="brand-mark" type="button" onClick={() => setActiveView("showcase")}>
+        <button className="brand-mark" type="button" onClick={() => navigate("showcase")}>
           <span className="brand-leaf" aria-hidden="true" />
           <span>{brandLogo}</span>
         </button>
@@ -342,7 +433,7 @@ function App() {
                 key={item.id}
                 className={activeView === item.id ? "nav-item active" : "nav-item"}
                 type="button"
-                onClick={() => setActiveView(item.id)}
+                onClick={() => navigate(item.id)}
               >
                 <Icon size={18} />
                 <span>{item.label}</span>
@@ -410,8 +501,13 @@ function App() {
               <Rocket size={16} />
               Guided demo
             </button>
+            <button className="pill-button" type="button" onClick={() => setPresentationOpen(true)}>
+              <WandSparkles size={16} />
+              Present
+            </button>
+            <RoleSwitcher persona={persona} applyPersona={applyPersona} />
             {user ? (
-              <button className="pill-button" type="button" onClick={() => setActiveView("auth")}>
+              <button className="pill-button" type="button" onClick={() => navigate("auth")}>
                 <UserCheck size={16} />
                 {user.name}
               </button>
@@ -441,6 +537,7 @@ function App() {
             brandLogo={brandLogo}
             notificationList={notificationList}
             onlineReaders={onlineReaders}
+            setPresentationOpen={setPresentationOpen}
           />
         )}
 
@@ -459,6 +556,7 @@ function App() {
             setMinRating={setMinRating}
             setSelectedStoryId={setSelectedStoryId}
             setActiveView={setActiveView}
+            navigate={navigate}
             savedStories={savedStories}
             toggleSaved={toggleSaved}
             membership={membership}
@@ -476,6 +574,7 @@ function App() {
             setMembership={setMembership}
             unlockedChapters={unlockedChapters}
             buyChapter={buyChapter}
+            openCheckout={openCheckout}
             isSaved={savedStories.has(selectedStory.id)}
             toggleSaved={() => toggleSaved(selectedStory.id)}
             isFollowed={followedAuthors.has(selectedStory.author)}
@@ -487,6 +586,22 @@ function App() {
             reviews={reviews}
             setReviews={setReviews}
             updateReadingHistory={updateReadingHistory}
+            adPlacements={adPlacements}
+          />
+        )}
+
+        {activeView === "story" && (
+          <StoryDetailView
+            story={selectedStory}
+            membership={membership}
+            isSaved={savedStories.has(selectedStory.id)}
+            toggleSaved={() => toggleSaved(selectedStory.id)}
+            isFollowed={followedAuthors.has(selectedStory.author)}
+            toggleFollow={() => toggleFollow(selectedStory.author)}
+            navigate={navigate}
+            openCheckout={openCheckout}
+            unlockedChapters={unlockedChapters}
+            reviews={reviews}
             adPlacements={adPlacements}
           />
         )}
@@ -511,7 +626,7 @@ function App() {
             setMembership={setMembership}
             story={selectedStory}
             activatePremium={activatePremium}
-            buyChapter={buyChapter}
+            buyChapter={openCheckout}
             unlockedChapters={unlockedChapters}
             user={user}
           />
@@ -537,6 +652,7 @@ function App() {
           />
         )}
       </main>
+      <MobileBottomNav activeView={activeView} navigate={navigate} />
       {authOpen && (
         <AuthModal
           mode={authMode}
@@ -554,7 +670,41 @@ function App() {
           setActiveView={setActiveView}
         />
       )}
+      {presentationOpen && (
+        <PresentationMode
+          step={presentationStep}
+          setStep={setPresentationStep}
+          onClose={() => setPresentationOpen(false)}
+          navigate={navigate}
+        />
+      )}
+      {checkout && (
+        <CheckoutModal
+          checkout={checkout}
+          setCheckout={setCheckout}
+          onConfirm={() => {
+            buyChapter(checkout.story.id, checkout.chapter);
+            setCheckout(null);
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+function MobileBottomNav({ activeView, navigate }) {
+  return (
+    <nav className="mobile-bottom-nav" aria-label="Mobile primary">
+      {navItems.slice(0, 5).map((item) => {
+        const Icon = item.icon;
+        return (
+          <button key={item.id} className={activeView === item.id ? "active" : ""} type="button" onClick={() => navigate(item.id)}>
+            <Icon size={18} />
+            <span>{item.label}</span>
+          </button>
+        );
+      })}
+    </nav>
   );
 }
 
@@ -562,6 +712,7 @@ function viewTitle(activeView) {
   const titles = {
     showcase: "Executive demo",
     discover: "Discover stories",
+    story: "Story details",
     reader: "Reading room",
     writer: "Author studio",
     premium: "Memberships",
@@ -569,6 +720,19 @@ function viewTitle(activeView) {
     admin: "Operations center",
   };
   return titles[activeView];
+}
+
+function RoleSwitcher({ persona, applyPersona }) {
+  return (
+    <label className="role-switcher">
+      <UserCheck size={15} />
+      <select value={persona} onChange={(event) => applyPersona(event.target.value)} aria-label="Demo persona">
+        {demoPersonas.map((item) => (
+          <option key={item.id} value={item.id}>{item.label}</option>
+        ))}
+      </select>
+    </label>
+  );
 }
 
 function DemoTimeline({ guidedStep, jumpToStep }) {
@@ -601,6 +765,7 @@ function ShowcaseView({
   brandLogo,
   notificationList,
   onlineReaders,
+  setPresentationOpen,
 }) {
   return (
     <section className="showcase-shell">
@@ -627,6 +792,10 @@ function ShowcaseView({
             <button className="pill-button" type="button" onClick={activatePremium}>
               <Crown size={16} />
               Activate premium
+            </button>
+            <button className="pill-button" type="button" onClick={() => setPresentationOpen(true)}>
+              <WandSparkles size={16} />
+              Presentation mode
             </button>
           </div>
         </div>
@@ -726,6 +895,8 @@ function ShowcaseView({
         </div>
       </section>
 
+      <RecommendationEngineExplainer />
+
       <section className="showcase-section architecture-stage">
         <div>
           <div className="section-heading loud">
@@ -792,6 +963,80 @@ function ShowcaseView({
           </button>
         </div>
       </section>
+
+      <RoadmapSection setActiveView={setActiveView} />
+    </section>
+  );
+}
+
+function RecommendationEngineExplainer() {
+  const rows = [
+    { label: "Reader history", value: 34, detail: "completed chapters, saves, follows" },
+    { label: "Tag overlap", value: 82, detail: "royalty + slow burn + mystery" },
+    { label: "Genre matrix", value: 71, detail: "Fantasy readers also finish Romance" },
+    { label: "Redis trend", value: 98, detail: "hot sorted set score" },
+  ];
+
+  return (
+    <section className="showcase-section rec-engine-stage">
+      <div>
+        <div className="section-heading loud">
+          <SlidersHorizontal size={20} />
+          <h2>No-AI recommendation engine</h2>
+        </div>
+        <p className="muted-copy">
+          This panel makes the recommendation logic explainable to non-technical clients:
+          a relational tag/genre matrix produces affinity scores, while Redis keeps live trend
+          rankings fast for high-concurrency reading sessions.
+        </p>
+      </div>
+      <div className="rec-scoreboard">
+        {rows.map((row) => (
+          <div key={row.label}>
+            <span>{row.label}</span>
+            <strong>{row.value}</strong>
+            <small>{row.detail}</small>
+            <div className="score-bar"><i style={{ width: `${row.value}%` }} /></div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function RoadmapSection({ setActiveView }) {
+  const phases = [
+    ["Phase 1", "MVP launch", "Auth, reader, writer, story publishing, comments, admin moderation"],
+    ["Phase 2", "Scale layer", "PostgreSQL indexing, Redis cache, CDN, BullMQ, FCM, analytics"],
+    ["Phase 3", "Revenue", "Premium memberships, direct unlocks, ads, payout logic, creator verification"],
+    ["Phase 4", "Growth", "Mobile app/PWA, localization, campaigns, advanced discovery, creator tools"],
+  ];
+
+  return (
+    <section className="showcase-section roadmap-stage">
+      <div className="section-heading loud">
+        <Rocket size={20} />
+        <h2>Client handoff roadmap</h2>
+      </div>
+      <div className="roadmap-grid">
+        {phases.map(([phase, title, detail]) => (
+          <article key={phase}>
+            <span>{phase}</span>
+            <strong>{title}</strong>
+            <p>{detail}</p>
+          </article>
+        ))}
+      </div>
+      <div className="roadmap-actions">
+        <button className="primary-action" type="button" onClick={() => setActiveView("admin")}>
+          <BarChart3 size={16} />
+          Show admin readiness
+        </button>
+        <button className="pill-button" type="button" onClick={() => setActiveView("writer")}>
+          <PenLine size={16} />
+          Show creator workflow
+        </button>
+      </div>
     </section>
   );
 }
@@ -835,6 +1080,137 @@ function NotificationDrawer({ notificationList, broadcastStatus, onClose, setAct
           Open broadcast center
         </button>
       </aside>
+    </div>
+  );
+}
+
+const presentationSlides = [
+  {
+    view: "showcase",
+    title: "Executive overview",
+    copy: "Open with the platform story: reader experience, writer tooling, monetization, operations, and scale in one cohesive product.",
+  },
+  {
+    view: "story",
+    title: "Story detail and discovery",
+    copy: "Show the client a real story page with verification, chapter list, premium states, reviews, similar stories, and ad placement.",
+  },
+  {
+    view: "reader",
+    title: "Premium reading room",
+    copy: "Demonstrate themes, typography controls, reading progress, timer, comments, reactions, follow, bookmarks, and paid unlock.",
+  },
+  {
+    view: "writer",
+    title: "Writer studio",
+    copy: "Show autosave, rich text controls, scheduling, preview, word count, chapter management, and publishing progression.",
+  },
+  {
+    view: "admin",
+    title: "Admin operations",
+    copy: "Close with verification approvals, user moderation, broadcast center, analytics, branding controls, and ad switches.",
+  },
+];
+
+function PresentationMode({ step, setStep, onClose, navigate }) {
+  const slide = presentationSlides[step] ?? presentationSlides[0];
+
+  function move(delta) {
+    const next = Math.min(presentationSlides.length - 1, Math.max(0, step + delta));
+    setStep(next);
+    navigate(presentationSlides[next].view);
+  }
+
+  return (
+    <div className="presentation-overlay" role="dialog" aria-modal="true" aria-labelledby="presentation-title">
+      <div className="presentation-card">
+        <button className="icon-button modal-close" type="button" aria-label="Close presentation" onClick={onClose}>
+          <X size={18} />
+        </button>
+        <span className="hero-kicker">
+          <WandSparkles size={16} />
+          Client walkthrough
+        </span>
+        <h2 id="presentation-title">{slide.title}</h2>
+        <p>{slide.copy}</p>
+        <div className="presentation-progress">
+          {presentationSlides.map((item, index) => (
+            <button
+              key={item.title}
+              className={index === step ? "active" : ""}
+              type="button"
+              aria-label={`Go to ${item.title}`}
+              onClick={() => {
+                setStep(index);
+                navigate(item.view);
+              }}
+            />
+          ))}
+        </div>
+        <div className="locked-actions">
+          <button className="pill-button" type="button" onClick={() => move(-1)} disabled={step === 0}>
+            <ChevronLeft size={16} />
+            Back
+          </button>
+          <button className="primary-action" type="button" onClick={() => move(1)} disabled={step === presentationSlides.length - 1}>
+            Next
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CheckoutModal({ checkout, setCheckout, onConfirm }) {
+  const [method, setMethod] = useState(checkout.method || "Card");
+  const [processing, setProcessing] = useState(false);
+
+  function submitPayment() {
+    setProcessing(true);
+    window.setTimeout(() => {
+      setProcessing(false);
+      onConfirm();
+    }, 700);
+  }
+
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <section className="checkout-modal" role="dialog" aria-modal="true" aria-labelledby="checkout-title">
+        <button className="icon-button modal-close" type="button" aria-label="Close checkout" onClick={() => setCheckout(null)}>
+          <X size={18} />
+        </button>
+        <div className="section-heading">
+          <CreditCard size={19} />
+          <h2 id="checkout-title">Secure chapter unlock</h2>
+        </div>
+        <div className="checkout-story">
+          <img src={checkout.story.image} alt="" />
+          <div>
+            <strong>{checkout.story.title}</strong>
+            <span>Chapter {checkout.chapter + 18} · Direct paid unlock</span>
+          </div>
+        </div>
+        <div className="checkout-methods">
+          {["Card", "PayHere", "Apple Pay"].map((item) => (
+            <button key={item} className={method === item ? "active" : ""} type="button" onClick={() => setMethod(item)}>
+              {item}
+            </button>
+          ))}
+        </div>
+        <label className="field-stack">
+          <span>Demo card</span>
+          <input value="4242 4242 4242 4242" readOnly />
+        </label>
+        <div className="price-line">
+          <span>{method} payment</span>
+          <strong>$0.99</strong>
+        </div>
+        <button className="primary-action wide" type="button" onClick={submitPayment}>
+          {processing ? <Timer size={16} /> : <Unlock size={16} />}
+          {processing ? "Processing..." : "Pay and unlock"}
+        </button>
+      </section>
     </div>
   );
 }
@@ -1037,6 +1413,7 @@ function DiscoverView({
   setMinRating,
   setSelectedStoryId,
   setActiveView,
+  navigate,
   savedStories,
   toggleSaved,
   membership,
@@ -1163,11 +1540,15 @@ function DiscoverView({
                     type="button"
                     onClick={() => {
                       setSelectedStoryId(story.id);
-                      setActiveView("reader");
+                      navigate("reader", story.id);
                     }}
                   >
                     <Play size={16} />
                     Read
+                  </button>
+                  <button className="pill-button" type="button" onClick={() => navigate("story", story.id)}>
+                    <Eye size={16} />
+                    Details
                   </button>
                   <button
                     className="icon-button"
@@ -1314,12 +1695,153 @@ function BadgeShowcase() {
   );
 }
 
+function StoryDetailView({
+  story,
+  membership,
+  isSaved,
+  toggleSaved,
+  isFollowed,
+  toggleFollow,
+  navigate,
+  openCheckout,
+  unlockedChapters,
+  reviews,
+  adPlacements,
+}) {
+  const similarStories = stories.filter((item) => item.id !== story.id && (item.genre === story.genre || item.tags.some((tag) => story.tags.includes(tag)))).slice(0, 3);
+  const averageRating = (reviews.reduce((total, review) => total + review.rating, 0) / Math.max(1, reviews.length)).toFixed(1);
+
+  return (
+    <section className="story-detail-layout">
+      <article className="story-detail-hero">
+        <img src={story.image} alt="" />
+        <div className="story-detail-copy">
+          <div className="story-line">
+            <span className="genre-chip">{story.genre}</span>
+            {story.verified && (
+              <span className="verified">
+                <BadgeCheck size={15} />
+                Verified author
+              </span>
+            )}
+            {story.premium && (
+              <span className="premium-chip">
+                <Crown size={14} />
+                Premium
+              </span>
+            )}
+          </div>
+          <h2>{story.title}</h2>
+          <p>{story.blurb}</p>
+          <div className="story-detail-stats">
+            <Metric label="Reads" value={story.reads} />
+            <Metric label="Rating" value={averageRating} />
+            <Metric label="Chapters" value={story.chapters} />
+            <Metric label="Read time" value={`${story.minutes}m`} />
+          </div>
+          <div className="hero-actions">
+            <button className="primary-action" type="button" onClick={() => navigate("reader", story.id)}>
+              <Play size={16} />
+              Start reading
+            </button>
+            <button className="pill-button" type="button" onClick={toggleSaved}>
+              <Bookmark size={16} fill={isSaved ? "currentColor" : "none"} />
+              {isSaved ? "In library" : "Add library"}
+            </button>
+            <button className="pill-button" type="button" onClick={toggleFollow}>
+              <Users size={16} />
+              {isFollowed ? "Following" : "Follow author"}
+            </button>
+          </div>
+        </div>
+      </article>
+
+      <div className="story-detail-grid">
+        <section className="surface-panel">
+          <div className="section-heading">
+            <BookOpen size={18} />
+            <h2>Chapters</h2>
+          </div>
+          {chapters.map((chapter, index) => (
+            <ChapterRow
+              key={chapter.title}
+              chapter={chapter}
+              index={index}
+              story={story}
+              membership={membership}
+              unlockedChapters={unlockedChapters}
+              openCheckout={openCheckout}
+              navigate={navigate}
+            />
+          ))}
+        </section>
+
+        <section className="surface-panel">
+          <div className="section-heading">
+            <Star size={18} />
+            <h2>Reviews</h2>
+          </div>
+          {reviews.slice(0, 3).map((review) => (
+            <article className="review-row" key={review.id}>
+              <strong>{review.name}</strong>
+              <span>{"★".repeat(review.rating)}{"☆".repeat(5 - review.rating)}</span>
+              <p>{review.text}</p>
+            </article>
+          ))}
+        </section>
+
+        <aside className="surface-panel">
+          <div className="section-heading">
+            <Sparkles size={18} />
+            <h2>Similar stories</h2>
+          </div>
+          {similarStories.map((item) => (
+            <button className="compact-row clickable-row" key={item.id} type="button" onClick={() => navigate("story", item.id)}>
+              <img src={item.image} alt="" />
+              <div>
+                <strong>{item.title}</strong>
+                <span>{item.genre} · {item.rating}</span>
+              </div>
+            </button>
+          ))}
+          <AdSlot label="Story details page" membership={membership} adPlacements={adPlacements} />
+        </aside>
+      </div>
+    </section>
+  );
+}
+
+function ChapterRow({ chapter, index, story, membership, unlockedChapters, openCheckout, navigate }) {
+  const isUnlocked = membership === "premium" || unlockedChapters.has(`${story.id}:${index}`) || !chapter.locked;
+
+  return (
+    <div className="chapter-row">
+      <div>
+        <strong>{chapter.title}</strong>
+        <span>{chapter.words.toLocaleString()} words · {Math.ceil(chapter.words / 230)} min read</span>
+      </div>
+      {!isUnlocked ? (
+        <button className="pill-button" type="button" onClick={() => openCheckout(story.id, index)}>
+          <Lock size={16} />
+          Unlock
+        </button>
+      ) : (
+        <button className="primary-action" type="button" onClick={() => navigate("reader", story.id)}>
+          <Play size={16} />
+          Read
+        </button>
+      )}
+    </div>
+  );
+}
+
 function ReaderView({
   story,
   membership,
   setMembership,
   unlockedChapters,
   buyChapter,
+  openCheckout,
   isSaved,
   toggleSaved,
   isFollowed,
@@ -1493,7 +2015,7 @@ function ReaderView({
           <LockedChapter
             story={story}
             startPremium={() => requireAuth(() => setMembership("premium"))}
-            buyChapter={() => buyChapter(story.id, chapterIndex)}
+            buyChapter={() => openCheckout(story.id, chapterIndex)}
           />
         ) : (
           <div className="chapter-body" style={{ fontSize: `${fontSize}px`, lineHeight: lineSpacing }}>
@@ -2099,6 +2621,39 @@ function AdminView({
             Simulate reader spike
           </button>
         </section>
+
+        <section className="surface-panel">
+          <div className="section-heading">
+            <LineChart size={18} />
+            <h2>Reports / analytics</h2>
+          </div>
+          <div className="analytics-chart-grid">
+            <MiniBarChart
+              title="Reading minutes"
+              values={[42, 58, 64, 88, 72, 96, 118]}
+              labels={["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]}
+            />
+            <MiniBarChart
+              title="Premium revenue"
+              values={[18, 24, 22, 31, 38, 44, 52]}
+              labels={["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]}
+            />
+          </div>
+          <div className="conversion-funnel">
+            {[
+              ["Visitors", "1.8M", 100],
+              ["Readers", "620K", 64],
+              ["Accounts", "188K", 36],
+              ["Premium", "16.3K", 18],
+            ].map(([label, value, width]) => (
+              <div key={label}>
+                <span>{label}</span>
+                <strong>{value}</strong>
+                <i style={{ width: `${width}%` }} />
+              </div>
+            ))}
+          </div>
+        </section>
       </div>
 
       <aside className="admin-side">
@@ -2202,6 +2757,22 @@ function AdminView({
         </section>
       </aside>
     </section>
+  );
+}
+
+function MiniBarChart({ title, values, labels }) {
+  const max = Math.max(...values);
+  return (
+    <div className="mini-chart">
+      <strong>{title}</strong>
+      <div className="bars">
+        {values.map((value, index) => (
+          <span key={`${title}-${labels[index]}`} style={{ height: `${Math.max(18, (value / max) * 100)}%` }}>
+            <em>{labels[index]}</em>
+          </span>
+        ))}
+      </div>
+    </div>
   );
 }
 

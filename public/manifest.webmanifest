@@ -1,0 +1,17 @@
+{
+  "name": "InkFlow Studio Demo",
+  "short_name": "InkFlow",
+  "description": "Premium reader and writer publishing platform demo.",
+  "start_url": "/#/",
+  "display": "standalone",
+  "background_color": "#f6f3ed",
+  "theme_color": "#151712",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "64x64",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
