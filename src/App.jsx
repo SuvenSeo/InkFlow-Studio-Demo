@@ -1,18 +1,24 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Activity,
+  ArrowRight,
   BadgeCheck,
   BarChart3,
   Bell,
+  BellRing,
   Bold,
   BookMarked,
   BookOpen,
   Bookmark,
+  Boxes,
   CalendarClock,
   Check,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  CircleDollarSign,
   CreditCard,
+  Cpu,
   Crown,
   Database,
   Eye,
@@ -25,6 +31,7 @@ import {
   Image,
   Italic,
   KeyRound,
+  Layers3,
   Library,
   Lock,
   LogOut,
@@ -42,11 +49,14 @@ import {
   Plus,
   Radio,
   Reply,
+  Rocket,
+  Route,
   Search,
   Send,
   Server,
   Settings2,
   ShieldCheck,
+  SlidersHorizontal,
   Smartphone,
   Sparkles,
   Star,
@@ -60,11 +70,14 @@ import {
   UserPlus,
   Users,
   WalletCards,
+  Workflow,
   X,
+  Zap,
 } from "lucide-react";
 import { badges, chapters, comments, moderationItems, notifications, stories } from "./data.js";
 
 const navItems = [
+  { id: "showcase", label: "Showcase", icon: Sparkles },
   { id: "discover", label: "Discover", icon: Search },
   { id: "reader", label: "Reader", icon: BookOpen },
   { id: "writer", label: "Write", icon: PenLine },
@@ -76,13 +89,37 @@ const navItems = [
 const genres = ["All", "Fantasy", "Romance", "Sci-Fi", "Mystery"];
 const sortOptions = ["Trending", "For You", "Top Rated", "New Updates"];
 const EMPTY_AD_PLACEMENTS = {};
+const demoSteps = [
+  { view: "auth", label: "Secure onboarding", note: "OAuth, email, reader/writer roles" },
+  { view: "discover", label: "Personalized discovery", note: "Search, genre, tags, Redis ranking" },
+  { view: "reader", label: "Premium reading room", note: "Progress sync, themes, comments, unlocks" },
+  { view: "writer", label: "Author studio", note: "Autosave, scheduling, publish workflow" },
+  { view: "admin", label: "Operations center", note: "Verification, broadcasts, ads, analytics" },
+];
+const featureChecklist = [
+  ["Reader", "Auth, discovery, library, history, follows, comments, premium access"],
+  ["Reading", "Focus mode, themes, sizing, spacing, progress, timer, fullscreen"],
+  ["Writer", "Dashboard, chapters, editor, autosave, scheduling, preview, publishing"],
+  ["Verification", "Blue tick badges, approval queue, admin status updates"],
+  ["Recommendations", "No-AI Redis + relational tag/genre matrix panels"],
+  ["Badges", "Streaks, completion, creator badges, public showcase"],
+  ["Premium", "Ad-free membership, early access, paid chapter unlock"],
+  ["Community", "Ratings, reviews, threaded comments, emoji reactions"],
+  ["Notifications", "BullMQ + FCM-style broadcast center and delivery states"],
+  ["Admin", "Users, moderation, verification, ads, reports, analytics"],
+  ["Branding", "Logo, favicon, banners, promotional visual controls"],
+  ["Ads", "Homepage, details, chapter section/middle/end, premium suppression"],
+  ["Search", "Filters, sorting, personalized discovery controls"],
+  ["Performance", "Redis cache, PostgreSQL indexing, CDN and concurrency metrics"],
+  ["UX", "Beginner-friendly flows with premium modern interaction design"],
+];
 const initialReviews = [
   { id: 1, name: "Nethmi", rating: 5, text: "Clean pacing and the chapter controls make it easy to stay immersed." },
   { id: 2, name: "Rowan", rating: 4, text: "The premium preview is clear without feeling disruptive." },
 ];
 
 function App() {
-  const [activeView, setActiveView] = useState("discover");
+  const [activeView, setActiveView] = useState("showcase");
   const [selectedStoryId, setSelectedStoryId] = useState(stories[0].id);
   const [genre, setGenre] = useState("All");
   const [sortBy, setSortBy] = useState("Trending");
@@ -96,6 +133,8 @@ function App() {
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState("login");
   const [toast, setToast] = useState("");
+  const [notificationOpen, setNotificationOpen] = useState(false);
+  const [guidedStep, setGuidedStep] = useState(0);
   const [commentsState, setCommentsState] = useState(comments);
   const [reviews, setReviews] = useState(initialReviews);
   const [unlockedChapters, setUnlockedChapters] = useState(new Set());
@@ -164,6 +203,18 @@ function App() {
 
   function showToast(message) {
     setToast(message);
+  }
+
+  function jumpToStep(index) {
+    const step = demoSteps[index];
+    if (!step) return;
+    setGuidedStep(index);
+    setActiveView(step.view);
+    showToast(`${step.label}: ${step.note}`);
+  }
+
+  function startGuidedDemo() {
+    jumpToStep(0);
   }
 
   function requireAuth(action, mode = "login") {
@@ -278,7 +329,7 @@ function App() {
   return (
     <div className="app" style={{ "--brand-accent": brandAccent }}>
       <aside className="rail" aria-label="Primary">
-        <button className="brand-mark" type="button" onClick={() => setActiveView("discover")}>
+        <button className="brand-mark" type="button" onClick={() => setActiveView("showcase")}>
           <span className="brand-leaf" aria-hidden="true" />
           <span>{brandLogo}</span>
         </button>
@@ -355,6 +406,10 @@ function App() {
               <Crown size={16} />
               {membership === "premium" ? "Premium active" : "Free tier"}
             </button>
+            <button className="pill-button tour-button" type="button" onClick={startGuidedDemo}>
+              <Rocket size={16} />
+              Guided demo
+            </button>
             {user ? (
               <button className="pill-button" type="button" onClick={() => setActiveView("auth")}>
                 <UserCheck size={16} />
@@ -366,11 +421,28 @@ function App() {
                 Register
               </button>
             )}
-            <button className="icon-button" type="button" aria-label="Notifications" onClick={() => showToast(`${notificationList.length} demo notifications available.`)}>
+            <button className="icon-button" type="button" aria-label="Notifications" onClick={() => setNotificationOpen(true)}>
               <Bell size={18} />
             </button>
           </div>
         </header>
+
+        <DemoTimeline guidedStep={guidedStep} jumpToStep={jumpToStep} />
+
+        {activeView === "showcase" && (
+          <ShowcaseView
+            user={user}
+            membership={membership}
+            setActiveView={setActiveView}
+            openAuth={openAuth}
+            activatePremium={activatePremium}
+            startGuidedDemo={startGuidedDemo}
+            jumpToStep={jumpToStep}
+            brandLogo={brandLogo}
+            notificationList={notificationList}
+            onlineReaders={onlineReaders}
+          />
+        )}
 
         {activeView === "discover" && (
           <DiscoverView
@@ -474,12 +546,21 @@ function App() {
         />
       )}
       {toast && <div className="toast" role="status">{toast}</div>}
+      {notificationOpen && (
+        <NotificationDrawer
+          notificationList={notificationList}
+          broadcastStatus={broadcastStatus}
+          onClose={() => setNotificationOpen(false)}
+          setActiveView={setActiveView}
+        />
+      )}
     </div>
   );
 }
 
 function viewTitle(activeView) {
   const titles = {
+    showcase: "Executive demo",
     discover: "Discover stories",
     reader: "Reading room",
     writer: "Author studio",
@@ -488,6 +569,274 @@ function viewTitle(activeView) {
     admin: "Operations center",
   };
   return titles[activeView];
+}
+
+function DemoTimeline({ guidedStep, jumpToStep }) {
+  return (
+    <section className="demo-timeline" aria-label="Guided demo path">
+      {demoSteps.map((step, index) => (
+        <button
+          key={step.label}
+          className={guidedStep === index ? "active" : ""}
+          type="button"
+          onClick={() => jumpToStep(index)}
+        >
+          <span>{index + 1}</span>
+          <strong>{step.label}</strong>
+          <small>{step.note}</small>
+        </button>
+      ))}
+    </section>
+  );
+}
+
+function ShowcaseView({
+  user,
+  membership,
+  setActiveView,
+  openAuth,
+  activatePremium,
+  startGuidedDemo,
+  jumpToStep,
+  brandLogo,
+  notificationList,
+  onlineReaders,
+}) {
+  return (
+    <section className="showcase-shell">
+      <div className="showcase-hero">
+        <div className="hero-copy">
+          <span className="hero-kicker">
+            <Sparkles size={16} />
+            Client-ready product theatre
+          </span>
+          <h2>{brandLogo}: a premium reading, writing, monetization, and operations platform.</h2>
+          <p>
+            This is not a static mockup. It is a working front-end demo with stateful auth, premium unlocks,
+            reading preferences, publishing workflow, comments, notifications, verification, ads, and admin controls.
+          </p>
+          <div className="hero-actions">
+            <button className="primary-action" type="button" onClick={startGuidedDemo}>
+              <Rocket size={17} />
+              Run guided demo
+            </button>
+            <button className="pill-button" type="button" onClick={() => (user ? setActiveView("reader") : openAuth("register"))}>
+              {user ? <BookOpen size={16} /> : <UserPlus size={16} />}
+              {user ? "Open reader" : "Create demo account"}
+            </button>
+            <button className="pill-button" type="button" onClick={activatePremium}>
+              <Crown size={16} />
+              Activate premium
+            </button>
+          </div>
+        </div>
+
+        <div className="hero-product-frame" aria-label="Live product overview">
+          <div className="frame-toolbar">
+            <span />
+            <span />
+            <span />
+            <strong>Live platform state</strong>
+          </div>
+          <div className="frame-grid">
+            <div className="frame-card reader-card">
+              <BookOpen size={20} />
+              <strong>Reader</strong>
+              <span>Chapter progress synced · {membership === "premium" ? "Ad-free" : "Ad supported"}</span>
+              <div className="mini-progress"><span style={{ width: "68%" }} /></div>
+            </div>
+            <div className="frame-card">
+              <PenLine size={20} />
+              <strong>Writer</strong>
+              <span>Autosave active · Scheduled release ready</span>
+            </div>
+            <div className="frame-card">
+              <ShieldCheck size={20} />
+              <strong>Admin</strong>
+              <span>4 moderation items · verification queue live</span>
+            </div>
+            <div className="frame-card">
+              <BellRing size={20} />
+              <strong>FCM Queue</strong>
+              <span>{notificationList.length} campaigns · BullMQ delivery states</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="impact-strip">
+        <Metric label="Reader p95 load" value="0.8s" />
+        <Metric label="Redis hit rate" value="94%" />
+        <Metric label="Online readers" value={onlineReaders.toLocaleString()} />
+        <Metric label="Premium conversion" value="8.7%" />
+      </div>
+
+      <section className="showcase-section">
+        <div className="section-heading loud">
+          <Route size={20} />
+          <h2>Send this flow to the client</h2>
+        </div>
+        <div className="demo-script-grid">
+          {demoSteps.map((step, index) => (
+            <button key={step.label} type="button" onClick={() => jumpToStep(index)}>
+              <span>{String(index + 1).padStart(2, "0")}</span>
+              <strong>{step.label}</strong>
+              <small>{step.note}</small>
+              <ArrowRight size={16} />
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="showcase-section product-theatre">
+        <div className="theatre-panel">
+          <div className="section-heading loud">
+            <Layers3 size={20} />
+            <h2>Every requested module is represented</h2>
+          </div>
+          <div className="feature-checklist">
+            {featureChecklist.map(([title, detail]) => (
+              <div key={title}>
+                <CheckCircle2 size={17} />
+                <strong>{title}</strong>
+                <span>{detail}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="phone-preview">
+          <div className="phone-notch" />
+          <div className="phone-screen">
+            <span>InkFlow mobile</span>
+            <h3>Read anywhere</h3>
+            <div className="phone-book">
+              <img src={stories[2].image} alt="" />
+              <div>
+                <strong>{stories[2].title}</strong>
+                <small>Ad-free chapter access</small>
+              </div>
+            </div>
+            <div className="phone-controls">
+              <button type="button"><Moon size={14} /></button>
+              <button type="button"><BookMarked size={14} /></button>
+              <button type="button"><Maximize2 size={14} /></button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="showcase-section architecture-stage">
+        <div>
+          <div className="section-heading loud">
+            <Cpu size={20} />
+            <h2>Architecture story for decision makers</h2>
+          </div>
+          <p className="muted-copy">
+            The demo explains how the real build scales: PostgreSQL for relational story, user, purchase, and progress data;
+            Redis for hot recommendations and trends; BullMQ for fan-out broadcasts; Firebase Cloud Messaging for delivery;
+            CDN for fast image/chapter assets; and payment gateways for direct unlocks.
+          </p>
+        </div>
+        <div className="architecture-map">
+          {[
+            [Database, "PostgreSQL", "indexed reads, tags, purchases"],
+            [Server, "Redis", "hot ranks and cache"],
+            [Boxes, "BullMQ", "notification fan-out"],
+            [Smartphone, "FCM", "device delivery"],
+            [CircleDollarSign, "Payments", "premium and unlocks"],
+            [Zap, "CDN edge", "fast chapter delivery"],
+          ].map(([Icon, label, detail]) => (
+            <div key={label}>
+              <Icon size={20} />
+              <strong>{label}</strong>
+              <span>{detail}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="showcase-section monetization-board">
+        <div>
+          <div className="section-heading loud">
+            <CircleDollarSign size={20} />
+            <h2>Monetization without coins</h2>
+          </div>
+          <div className="funnel-steps">
+            {[
+              ["Free tier", "Ad-supported reading and premium previews"],
+              ["Premium", "Ad-free reading, early access, exclusive content"],
+              ["Direct unlock", "Single paid chapter purchase through gateway"],
+              ["Creator upside", "Verified authors and premium publishing paths"],
+            ].map(([title, detail]) => (
+              <div key={title}>
+                <strong>{title}</strong>
+                <span>{detail}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="demo-command-card">
+          <span>Instant actions</span>
+          <button className="primary-action wide" type="button" onClick={() => setActiveView("premium")}>
+            <WalletCards size={16} />
+            Show checkout
+          </button>
+          <button className="pill-button wide" type="button" onClick={() => setActiveView("admin")}>
+            <Megaphone size={16} />
+            Show broadcast center
+          </button>
+          <button className="pill-button wide" type="button" onClick={() => setActiveView("writer")}>
+            <Workflow size={16} />
+            Show publishing workflow
+          </button>
+        </div>
+      </section>
+    </section>
+  );
+}
+
+function NotificationDrawer({ notificationList, broadcastStatus, onClose, setActiveView }) {
+  return (
+    <div className="drawer-backdrop" role="presentation">
+      <aside className="notification-drawer" role="dialog" aria-modal="true" aria-labelledby="notification-drawer-title">
+        <div className="drawer-head">
+          <div>
+            <span className="genre-chip">BullMQ + FCM</span>
+            <h2 id="notification-drawer-title">Notification center</h2>
+          </div>
+          <button className="icon-button" type="button" aria-label="Close notifications" onClick={onClose}>
+            <X size={18} />
+          </button>
+        </div>
+        <div className="delivery-status">
+          <Activity size={17} />
+          <strong>{broadcastStatus}</strong>
+          <span>Demo queue state</span>
+        </div>
+        <div className="drawer-list">
+          {notificationList.map((item) => (
+            <article key={`${item.title}-${item.group}`}>
+              <strong>{item.title}</strong>
+              <span>{item.group} · {item.reach}</span>
+              <em>{item.status}</em>
+            </article>
+          ))}
+        </div>
+        <button
+          className="primary-action wide"
+          type="button"
+          onClick={() => {
+            onClose();
+            setActiveView("admin");
+          }}
+        >
+          <Send size={16} />
+          Open broadcast center
+        </button>
+      </aside>
+    </div>
+  );
 }
 
 function AuthView({ user, authMode, setAuthMode, handleAuthSubmit, signOut, membership, setActiveView }) {
